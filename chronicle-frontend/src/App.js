@@ -713,19 +713,31 @@ export default function Chronicle() {
                   // Using Pollinations.ai free API (no key required!)
                   const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(
                     selectedScene.visualPrompt
-                  )}?width=1024&height=576&nologo=true&seed=${Date.now()}`;
+                  )}?width=1024&height=576&nologo=true&seed=${selectedScene.id}`;
 
-                  // Preload the image to ensure it's ready
-                  await new Promise((resolve, reject) => {
-                    const img = new Image();
-                    img.onload = resolve;
-                    img.onerror = reject;
-                    img.src = imageUrl;
-                  });
+                  // Fetch the image with timeout to ensure it's ready
+                  const controller = new AbortController();
+                  const timeoutId = setTimeout(() => controller.abort(), 60000);
+                  let loadedImageUrl;
+                  try {
+                    const response = await fetch(imageUrl, {
+                      signal: controller.signal,
+                    });
+                    clearTimeout(timeoutId);
+                    if (!response.ok) {
+                      throw new Error(`Image service returned ${response.status}`);
+                    }
+                    // Convert to blob URL so the image is fully loaded
+                    const blob = await response.blob();
+                    loadedImageUrl = URL.createObjectURL(blob);
+                  } catch (fetchErr) {
+                    clearTimeout(timeoutId);
+                    throw fetchErr;
+                  }
 
-                  // Update the scene with the image URL
+                  // Update the scene with the loaded image URL
                   const updatedScenes = scenes.map((s) =>
-                    s.id === selectedScene.id ? { ...s, imageUrl } : s
+                    s.id === selectedScene.id ? { ...s, imageUrl: loadedImageUrl } : s
                   );
                   setScenes(updatedScenes);
 
