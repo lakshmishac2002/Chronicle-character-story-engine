@@ -260,21 +260,33 @@ def generate_evolved_scene(
     
     prompt = f"""Apply this edit to create an EVOLVED scene (not a reset).
 
-CHARACTER CANON: {character.name} - {character.canonicalAppearance}
+CHARACTER CANON (IMMUTABLE - MUST appear exactly as described):
+Name: {character.name}
+Appearance: {character.canonicalAppearance}
+Personality: {character.personality}
+Immutable Traits: {', '.join(character.immutableTraits)}
 
 PREVIOUS SCENE:
 {current_scene.sceneDescription}
+
+PREVIOUS VISUAL PROMPT:
+{current_scene.visualPrompt}
 
 APPROVED CHANGES:
 {json.dumps(edit_analysis.changes, indent=2)}
 
 Narrative Delta: {edit_analysis.narrativeDelta}
 
+CRITICAL RULES FOR THE VISUAL PROMPT:
+- The character's race, ethnicity, skin color, and physical features MUST remain IDENTICAL to the canonical appearance above.
+- Start the visualPrompt by restating the character's core physical description (skin color, hair, eyes, distinguishing features) from the canon BEFORE describing the scene changes.
+- Only modify elements that the approved changes explicitly allow.
+
 Respond ONLY with valid JSON for the UPDATED scene (no markdown, no code blocks):
 
 {{
   "sceneDescription": "evolved 2-3 sentences",
-  "visualPrompt": "updated visual maintaining character canon",
+  "visualPrompt": "MUST begin with character's canonical physical description, then describe scene",
   "emotionalState": "{edit_analysis.changes.get('emotionalState') or current_scene.emotionalState}",
   "environment": "{edit_analysis.changes.get('environment') or current_scene.environment}",
   "narrativeSummary": "what changed"

@@ -163,7 +163,11 @@ export default function Chronicle() {
       return;
     try {
       if (character) {
-        await apiCall(`/api/characters/${character.id}`, { method: "DELETE" });
+        try {
+          await apiCall(`/api/characters/${character.id}`, { method: "DELETE" });
+        } catch (e) {
+          // Backend may have already lost the character (e.g. Render restart), ignore
+        }
       }
       // Clear state
       setCharacter(null);
@@ -710,29 +714,36 @@ export default function Chronicle() {
                 });
 
                 try {
-                  // Using Pollinations.ai free API (no key required!)
-                  const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(
-                    selectedScene.visualPrompt
-                  )}?width=1024&height=576&nologo=true&seed=${selectedScene.id}`;
-
-                  // Fetch the image with timeout to ensure it's ready
-                  const controller = new AbortController();
-                  const timeoutId = setTimeout(() => controller.abort(), 60000);
                   let loadedImageUrl;
+
+                  // Try Pollinations.ai first (free, no key required)
                   try {
-                    const response = await fetch(imageUrl, {
-                      signal: controller.signal,
-                    });
+                    const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(
+                      selectedScene.visualPrompt
+                    )}?width=1024&height=576&nologo=true&seed=${selectedScene.id}`;
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 30000);
+                    const response = await fetch(imageUrl, { signal: controller.signal });
                     clearTimeout(timeoutId);
-                    if (!response.ok) {
-                      throw new Error(`Image service returned ${response.status}`);
-                    }
-                    // Convert to blob URL so the image is fully loaded
+                    if (!response.ok) throw new Error(`Pollinations returned ${response.status}`);
                     const blob = await response.blob();
                     loadedImageUrl = URL.createObjectURL(blob);
-                  } catch (fetchErr) {
-                    clearTimeout(timeoutId);
-                    throw fetchErr;
+                  } catch (pollinationsErr) {
+                    console.warn("Pollinations failed, trying Puter.js fallback:", pollinationsErr.message);
+                    setSystemMessage({ message: "Primary service down, trying fallback...", type: "info" });
+
+                    // Fallback: dynamically load Puter.js and use its image generation
+                    if (!window.puter) {
+                      await new Promise((resolve, reject) => {
+                        const script = document.createElement("script");
+                        script.src = "https://js.puter.com/v2/";
+                        script.onload = resolve;
+                        script.onerror = () => reject(new Error("Failed to load Puter.js"));
+                        document.head.appendChild(script);
+                      });
+                    }
+                    const imgEl = await window.puter.ai.txt2img(selectedScene.visualPrompt);
+                    loadedImageUrl = imgEl.src;
                   }
 
                   // Update the scene with the loaded image URL
@@ -745,7 +756,7 @@ export default function Chronicle() {
                 } catch (error) {
                   console.error("Image generation error:", error);
                   showMessage(
-                    "Failed to generate image. Try again.",
+                    "Failed to generate image: " + error.message,
                     "error"
                   );
                 } finally {
